@@ -1,0 +1,56 @@
+<div id="records-table" class="overflow-x-auto">
+    <table class="min-w-full bg-white border border-slate-200 rounded shadow-sm">
+        <thead class="bg-slate-100 text-left text-xs uppercase tracking-wider text-slate-600">
+            <tr>
+                <th class="px-3 py-2">ID</th>
+                <th class="px-3 py-2">Subject</th>
+                <th class="px-3 py-2">Fecha</th>
+                <th class="px-3 py-2">Bedtime</th>
+                <th class="px-3 py-2">Wakeup</th>
+                <th class="px-3 py-2">Horas</th>
+                <th class="px-3 py-2">Eficiencia %</th>
+                <th class="px-3 py-2">Awakenings</th>
+                <th class="px-3 py-2">Adjunto</th>
+                <th class="px-3 py-2">Acciones</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-200">
+            {% for r in records %}
+            <tr class="hover:bg-slate-50">
+                <td class="px-3 py-2 text-sm">{{ r.id }}</td>
+                <td class="px-3 py-2 text-sm">{{ r.subject_id }} {% if r.subject %}({{ r.subject.gender }}){% endif %}</td>
+                <td class="px-3 py-2 text-sm">{{ r.record_date }}</td>
+                <td class="px-3 py-2 text-sm">{{ r.bedtime.strftime('%H:%M') }}</td>
+                <td class="px-3 py-2 text-sm">{{ r.wakeup_time.strftime('%H:%M') }}</td>
+                <td class="px-3 py-2 text-sm">{{ "%.2f"|format(r.sleep_duration) }}</td>
+                <td class="px-3 py-2 text-sm">{{ "%.0f"|format(r.sleep_efficiency) }}</td>
+                <td class="px-3 py-2 text-sm">{{ r.awakenings }}</td>
+                <td class="px-3 py-2 text-sm">
+                    {% if r.attachment_url %}
+                        {% if r.attachment_url.endswith('.png') or r.attachment_url.endswith('.jpg') or r.attachment_url.endswith('.jpeg') or r.attachment_url.endswith('.gif') %}
+                            <img src="{{ r.attachment_url }}" alt="attachment" class="w-12 h-12 object-cover rounded">
+                        {% else %}
+                            <a href="{{ r.attachment_url }}" class="text-amber-600 underline" target="_blank">Ver</a>
+                        {% endif %}
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
+                <td class="px-3 py-2 text-sm space-x-2">
+                    <form class="inline-block" data-api-action="/api/records/{{ r.id }}" data-api-method="PATCH" data-refresh-target="#records-table" data-refresh-url="/partials/records-table">
+                        <input type="hidden" name="is_deleted" value="{{ 1 if not r.is_deleted else 0 }}">
+                        <button class="text-xs px-3 py-1 rounded bg-amber-500 text-white hover:bg-amber-600" type="submit">
+                            {{ "Restaurar" if r.is_deleted else "Eliminar" }}
+                        </button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+            {% if records|length == 0 %}
+            <tr>
+                <td colspan="10" class="px-3 py-4 text-center text-sm text-slate-500">Sin resultados</td>
+            </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>

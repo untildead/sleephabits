@@ -1,0 +1,35 @@
+<div class="space-y-4">
+    <h2 class="text-lg font-semibold">Editar subject #{{ subject.id }}</h2>
+    <form
+      hx-post="/api/subjects/{{ subject.id }}/update"
+      hx-target="#subjects-table"
+      hx-swap="outerHTML"
+      class="space-y-3"
+    >
+        <div>
+            <label class="block text-xs uppercase text-slate-500">Nombre</label>
+            <input type="text" name="name" value="{{ subject.name or '' }}" class="border rounded px-2 py-1 w-full" placeholder="Opcional">
+        </div>
+        <div>
+            <label class="block text-xs uppercase text-slate-500">Edad</label>
+            <input type="number" name="age" min="0" value="{{ subject.age }}" required class="border rounded px-2 py-1 w-full">
+        </div>
+        <div>
+            <label class="block text-xs uppercase text-slate-500">Genero</label>
+            <input type="text" name="gender" value="{{ subject.gender }}" required class="border rounded px-2 py-1 w-full" placeholder="F/M/O">
+        </div>
+        <div>
+            <label class="block text-xs uppercase text-slate-500">Tags</label>
+            <select multiple name="tag_ids" class="border rounded px-2 py-1 w-full h-24">
+                {% for tag in tags %}
+                <option value="{{ tag.id }}" {% if tag in subject.tags %}selected{% endif %}>{{ tag.name }}</option>
+                {% endfor %}
+            </select>
+            <p class="text-xs text-slate-500 mt-1">Ctrl + clic para seleccionar multiples.</p>
+        </div>
+        <div class="flex gap-2">
+            <button type="submit" class="bg-emerald-600 text-white px-3 py-2 rounded hover:bg-emerald-700">Guardar cambios</button>
+            <button type="button" onclick="window.location.reload()" class="text-sm px-3 py-2 border rounded text-slate-600">Cancelar</button>
+        </div>
+    </form>
+</div>

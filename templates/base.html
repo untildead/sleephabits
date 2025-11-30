@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title or "SleepHabits" }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-slate-50 text-slate-900">
+    <nav class="bg-slate-900 text-white">
+        <div class="max-w-6xl mx-auto px-4 py-3 flex items-center gap-4">
+            <a href="/" class="font-semibold text-lg">SleepHabits</a>
+            <a href="/subjects" class="hover:text-amber-300">Subjects</a>
+            <a href="/records" class="hover:text-amber-300">Records</a>
+            <a href="/dashboard" class="hover:text-amber-300">Dashboard</a>
+            <a href="/docs" class="ml-auto text-sm underline hover:text-amber-300">/docs</a>
+        </div>
+    </nav>
+    <main class="max-w-6xl mx-auto px-4 py-6">
+        {% block content %}{% endblock %}
+    </main>
+    <div id="toast" class="hidden fixed bottom-4 right-4 bg-slate-900 text-white px-4 py-2 rounded shadow-lg"></div>
+    <script>
+        function showToast(message, isError=false) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = `fixed bottom-4 right-4 px-4 py-2 rounded shadow-lg ${isError ? 'bg-red-600' : 'bg-emerald-600'} text-white`;
+            toast.classList.remove('hidden');
+            setTimeout(() => toast.classList.add('hidden'), 2500);
+        }
+        function wireApiForms() {
+            document.querySelectorAll('[data-api-action]').forEach(form => {
+                if (form.dataset.wired === 'true') return;
+                form.dataset.wired = 'true';
+                form.addEventListener('submit', async (ev) => {
+                    ev.preventDefault();
+                    const action = form.dataset.apiAction;
+                    const method = form.dataset.apiMethod || 'POST';
+                    const formData = new FormData(form);
+                    const payload = {};
+                    formData.forEach((v, k) => {
+                        if (payload[k] !== undefined) {
+                            if (!Array.isArray(payload[k])) payload[k] = [payload[k]];
+                            payload[k].push(v);
+                        } else {
+                            payload[k] = v;
+                        }
+                    });
+                    try {
+                        const res = await fetch(action, {
+                            method,
+                            headers: {"Content-Type": "application/json"},
+                            body: method === 'GET' ? undefined : JSON.stringify(payload)
+                        });
+                        if (!res.ok) {
+                            const detail = await res.json().catch(() => ({}));
+                            throw new Error(detail.detail || res.statusText);
+                        }
+                        showToast('Guardado');
+                        if (window.htmx) {
+                            const target = form.dataset.refreshTarget;
+                            const url = form.dataset.refreshUrl;
+                            if (target && url) {
+                                htmx.ajax('GET', url, {target});
+                            }
+                        }
+                    } catch (err) {
+                        showToast(err.message || 'Error', true);
+                    }
+                });
+            });
+        }
+        document.addEventListener('DOMContentLoaded', wireApiForms);
+        document.body.addEventListener('htmx:afterSwap', wireApiForms);
+    </script>
+</body>
+</html>

@@ -1,0 +1,67 @@
+<div id="subjects-table" class="overflow-x-auto">
+    <table class="min-w-full bg-white border border-slate-200 rounded shadow-sm">
+        <thead class="bg-slate-100 text-left text-xs uppercase tracking-wider text-slate-600">
+            <tr>
+                <th class="px-3 py-2">ID</th>
+                <th class="px-3 py-2">Nombre</th>
+                <th class="px-3 py-2">Edad</th>
+                <th class="px-3 py-2">Género</th>
+                <th class="px-3 py-2">Tags</th>
+                <th class="px-3 py-2">Estado</th>
+                <th class="px-3 py-2">Acciones</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-200">
+            {% for s in subjects %}
+            <tr class="hover:bg-slate-50">
+                <td class="px-3 py-2 text-sm">{{ s.id }}</td>
+                <td class="px-3 py-2 text-sm">{{ s.name or "-" }}</td>
+                <td class="px-3 py-2 text-sm">{{ s.age }}</td>
+                <td class="px-3 py-2 text-sm">{{ s.gender }}</td>
+                <td class="px-3 py-2 text-sm">
+                    {% if s.tags %}
+                        {{ s.tags | map(attribute='name') | join(', ') }}
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
+                <td class="px-3 py-2 text-sm">{{ "Borrado" if s.is_deleted else "Activo" }}</td>
+                <td class="px-3 py-2 text-sm space-x-2">
+                    <button
+                      hx-get="/subjects/{{ s.id }}/edit"
+                      hx-target="#subject-form"
+                      hx-swap="innerHTML"
+                      class="bg-blue-600 hover:bg-blue-700 text-white text-sm px-3 py-1 rounded"
+                    >Editar</button>
+                    <form class="inline-block" data-api-action="/api/subjects/{{ s.id }}" data-api-method="PATCH" data-refresh-target="#subjects-table" data-refresh-url="/partials/subjects-table">
+                        <input type="hidden" name="is_deleted" value="{{ 1 if not s.is_deleted else 0 }}">
+                        <button class="text-xs px-3 py-1 rounded bg-amber-500 text-white hover:bg-amber-600" type="submit">
+                            {{ "Restaurar" if s.is_deleted else "Eliminar" }}
+                        </button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+            {% if subjects|length == 0 %}
+            <tr>
+                <td colspan="7" class="px-3 py-4 text-center text-sm text-slate-500">Sin resultados</td>
+            </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+
+<script>
+if (!window.subjectFormContainerWired) {
+    window.subjectFormContainerWired = true;
+    const ensureSubjectFormContainer = () => {
+        const cards = Array.from(document.querySelectorAll('div.bg-white.p-4.rounded.shadow'));
+        const target = cards.find((el) => el.querySelector('h2') && el.querySelector('h2').textContent.includes('Crear/editar'));
+        if (target && !target.id) {
+            target.id = 'subject-form';
+        }
+    };
+    document.addEventListener('DOMContentLoaded', ensureSubjectFormContainer);
+    document.body.addEventListener('htmx:afterSwap', ensureSubjectFormContainer);
+}
+</script>

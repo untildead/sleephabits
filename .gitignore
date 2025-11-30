@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.log
+
+# Envs
+.env
+.env.*.local
+
+# Tools / editors
+.vscode/
+.idea/
+*.code-workspace
+
+# Caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+dist/
+build/
