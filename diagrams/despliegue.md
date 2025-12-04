@@ -1,21 +1,14 @@
+```mermaid
 flowchart LR
-    subgraph Usuario
-        BROWSER[🧑‍💻 Navegador web\n(Chrome/Edge)]
+    U["Usuario<br/>Navegador web"] -->|HTTPS| R["Render.com<br/>Servicio web"]
+
+    subgraph Render
+        R --> A["Aplicación SleepHabits<br/>FastAPI + Jinja + Chart.js"]
     end
 
-    subgraph Render["Render.com (Producción)"]
-        subgraph App["Servicio web FastAPI"]
-            GUNICORN[gunicorn\n+ uvicorn workers]
-            API[main.py\nRouters FastAPI\nTemplates Jinja2\nChart.js]
-        end
-    end
+    A -->|"TLS (postgresql+asyncpg)"| DB[("Supabase<br/>PostgreSQL")]
+    A -->|"HTTP API"| ST[("Supabase Storage<br/>Bucket sleep-uploads")]
 
-    subgraph Supabase["Supabase (Cloud)"]
-        DB[(PostgreSQL\nsleep_db)]
-        STORAGE[(Storage\narchivos adjuntos)]
-    end
-
-    BROWSER <-- HTTP/HTTPS --> GUNICORN
-    GUNICORN --> API
-    API <-- TLS/Postgres --> DB
-    API <-- HTTPS (SDK/API) --> STORAGE
+    class U client
+    class R,A app
+    class DB,ST storage
