@@ -68,4 +68,3 @@ classDiagram
     Subject "1" --> "many" SubjectTag : etiqueta
     Tag "1" --> "many" SubjectTag : participa
 
-...  
