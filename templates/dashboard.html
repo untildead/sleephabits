@@ -3,202 +3,115 @@
 <div class="flex items-center justify-between mb-4">
   <div>
     <h1 class="text-2xl font-semibold text-slate-800">Dashboard</h1>
-    <p class="text-sm text-slate-500">Visualiza tendencias de sueno y eficiencia.</p>
-  </div>
-  <div class="space-x-2">
-    <a href="/api/reports/aggregates" class="text-sm text-slate-600 underline">JSON agregados</a>
-    <a href="/api/reports/timeseries" class="text-sm text-slate-600 underline">JSON series</a>
+    <p class="text-sm text-slate-500">Visualiza tendencias de sueño y eficiencia.</p>
   </div>
 </div>
 
 <div class="grid md:grid-cols-3 gap-6">
   <!-- Timeseries -->
-  <div class="bg-white p-4 rounded shadow md:col-span-2" id="timeseriesCard">
-    <h2 class="text-sm uppercase text-slate-500 mb-2">Duracion promedio (dias)</h2>
+  <div class="bg-white p-4 rounded shadow md:col-span-3" id="timeseriesCard">
+    <h2 class="text-sm uppercase text-slate-500 mb-2">Duración promedio (horas)</h2>
     <div class="relative h-64">
       <canvas id="timeseriesChart" class="absolute inset-0 w-full h-full"></canvas>
     </div>
     <p id="timeseriesEmpty" class="text-sm text-slate-500 mt-2 hidden">No hay datos</p>
   </div>
 
-  <!-- Aggregates -->
-  <div class="bg-white p-4 rounded shadow" id="efficiencyCard">
-    <h2 class="text-sm uppercase text-slate-500 mb-2">Eficiencia por genero</h2>
+  <!-- Hábitos y calidad -->
+  <div class="bg-white p-4 rounded shadow md:col-span-3" id="habitsCard">
+    <h2 class="text-sm uppercase text-slate-500 mb-2">Hábitos y calidad del sueño</h2>
     <div class="relative h-64">
-      <canvas id="efficiencyChart" class="absolute inset-0 w-full h-full"></canvas>
+      <canvas id="habitsChart" class="absolute inset-0 w-full h-full"></canvas>
     </div>
-    <p id="efficiencyEmpty" class="text-sm text-slate-500 mt-2 hidden">No hay datos</p>
-  </div>
-
-  <!-- Distribution -->
-  <div class="bg-white p-4 rounded shadow md:col-span-3" id="distributionCard">
-    <h2 class="text-sm uppercase text-slate-500 mb-2">Distribucion etapas/tags</h2>
-    <div class="relative h-64">
-      <canvas id="distributionChart" class="absolute inset-0 w-full h-full"></canvas>
-    </div>
-    <p id="distributionEmpty" class="text-sm text-slate-500 mt-2 hidden">No hay datos</p>
+    <p id="habitsEmpty" class="text-sm text-slate-500 mt-2 hidden">No hay datos</p>
   </div>
 </div>
 
 <script>
 const charts = window.sleepCharts || (window.sleepCharts = {});
+const baseOpts = { responsive: true, maintainAspectRatio: false };
 
 const toggleEmpty = (id, hasData) => {
   const el = document.getElementById(id);
-  if (!el) return;
-  el.classList.toggle('hidden', hasData);
+  if (el) el.classList.toggle('hidden', hasData);
 };
+const destroyChart = (key) => { if (charts[key]) { charts[key].destroy(); charts[key] = null; } };
 
-const destroyChart = (key) => {
-  if (charts[key]) {
-    charts[key].destroy();
-    charts[key] = null;
-  }
-};
-
-const weekKey = (dateStr) => {
-  const d = new Date(`${dateStr}T00:00:00Z`);
-  const target = new Date(d.valueOf());
-  const dayNr = (d.getUTCDay() + 6) % 7;
-  target.setUTCDate(target.getUTCDate() - dayNr + 3);
-  const firstThursday = new Date(Date.UTC(target.getUTCFullYear(), 0, 4));
-  const diff = target - firstThursday;
-  const week = 1 + Math.round(diff / (7 * 24 * 3600 * 1000));
-  return `${target.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
-};
-
-const baseOpts = {
-  responsive: true,
-  maintainAspectRatio: false,
-  resizeDelay: 200
-};
-
+// --- Timeseries (promedio diario de horas) ---
 const renderTimeseries = (ts) => {
   const daily = Array.isArray(ts.daily) ? [...ts.daily] : [];
   daily.sort((a, b) => new Date(a.date) - new Date(b.date));
-  if (!daily.length) {
-    destroyChart('timeseries');
-    toggleEmpty('timeseriesEmpty', false);
-    return;
-  }
+  if (!daily.length) { destroyChart('timeseries'); toggleEmpty('timeseriesEmpty', false); return; }
   toggleEmpty('timeseriesEmpty', true);
 
-  const weekly = Array.isArray(ts.weekly) ? ts.weekly : [];
-  const labels = daily.map((p) => p.date);
-  const dailyData = daily.map((p) => p.avg_duration);
-
-  const weeklyMap = {};
-  weekly.forEach((w) => { if (w.week) weeklyMap[w.week] = w.avg_duration; });
-  const weeklySeries = daily.map((p) => weeklyMap[weekKey(p.date)] ?? null);
-
-  const ctx = document.getElementById('timeseriesChart')?.getContext('2d');
-  if (!ctx) return;
-
+  const labels = daily.map(p => p.date);
+  const data = daily.map(p => Number(p.avg_duration ?? 0));
+  const ctx = document.getElementById('timeseriesChart')?.getContext('2d'); if (!ctx) return;
   destroyChart('timeseries');
   charts.timeseries = new Chart(ctx, {
     type: 'line',
-    data: {
-      labels,
-      datasets: [
-        { label: 'Horas', data: dailyData, borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.2)', tension: 0.3 },
-        { label: 'Promedio semanal', data: weeklySeries, borderColor: '#0ea5e9', backgroundColor: 'rgba(14,165,233,0.1)', tension: 0.2 }
-      ]
-    },
+    data: { labels, datasets: [{ label: 'Promedio diario (h)', data, tension: 0.25 }] },
     options: baseOpts
   });
 };
 
-const renderAggregates = (agg) => {
-  const rows = Array.isArray(agg.by_gender) ? agg.by_gender : [];
-  const baseLabels = ['F', 'M', 'O'];
-  const extraLabels = rows
-    .map((r) => (r.gender || '').toUpperCase())
-    .filter((g) => g && !baseLabels.includes(g));
-  const labels = [...baseLabels, ...extraLabels];
+// --- Hábitos y calidad (promedio eficiencia por tag) ---
+const renderHabits = (payload) => {
+  const rows = Array.isArray(payload.by_tag) ? payload.by_tag : [];
+  if (!rows.length) { destroyChart('habits'); toggleEmpty('habitsEmpty', false); return; }
+  toggleEmpty('habitsEmpty', true);
 
-  const data = labels.map((label) => {
-    const row = rows.find((r) => (r.gender || '').toUpperCase() === label);
-    return row ? Math.round(row.avg_efficiency || 0) : 0;
-  });
+  const labels = rows.map(r => r.tag);
+  const effData = rows.map(r => Number(r.avg_efficiency ?? 0));
+  const dur = rows.map(r => Number(r.avg_duration ?? 0));
+  const counts = rows.map(r => Number(r.n ?? 0));
 
-  if (!rows.length || data.every((v) => v === 0)) {
-    destroyChart('efficiency');
-    toggleEmpty('efficiencyEmpty', false);
-    return;
-  }
-  toggleEmpty('efficiencyEmpty', true);
-
-  const ctx = document.getElementById('efficiencyChart')?.getContext('2d');
-  if (!ctx) return;
-
-  destroyChart('efficiency');
-  charts.efficiency = new Chart(ctx, {
+  const ctx = document.getElementById('habitsChart')?.getContext('2d'); if (!ctx) return;
+  destroyChart('habits');
+  charts.habits = new Chart(ctx, {
     type: 'bar',
-    data: { labels, datasets: [{ label: 'Eficiencia %', data, backgroundColor: '#0ea5e9' }] },
-    options: baseOpts
-  });
-};
-
-const renderDistribution = (dist) => {
-  let labels = [];
-  let data = [];
-
-  if (dist && dist.source === 'sleep_stages' && dist.data) {
-    labels = ['REM', 'Deep', 'Light'];
-    data = [dist.data.rem || 0, dist.data.deep || 0, dist.data.light || 0];
-  } else if (dist && Array.isArray(dist.data)) {
-    labels = dist.data.map((t) => t.name || t['Tag.name'] || t[0] || 'Tag');
-    data = dist.data.map((t) => t.count || 0);
-  }
-
-  if (!data.length || data.every((v) => v === 0)) {
-    destroyChart('distribution');
-    toggleEmpty('distributionEmpty', false);
-    return;
-  }
-  toggleEmpty('distributionEmpty', true);
-
-  const ctx = document.getElementById('distributionChart')?.getContext('2d');
-  if (!ctx) return;
-
-  destroyChart('distribution');
-  charts.distribution = new Chart(ctx, {
-    type: 'doughnut',
-    data: { labels, datasets: [{ data, backgroundColor: ['#f59e0b', '#22c55e', '#0ea5e9', '#a855f7', '#ef4444'] }] },
-    options: baseOpts
+    data: { labels, datasets: [{ label: 'Eficiencia (%)', data: effData }] },
+    options: {
+      ...baseOpts,
+      plugins: {
+        tooltip: {
+          callbacks: {
+            label: (context) => {
+              const i = context.dataIndex;
+              const e = effData[i] ?? 0;
+              const h = dur[i] ?? 0;
+              const n = counts[i] ?? 0;
+              return ` Efic.: ${e.toFixed(1)}%  |  Horas: ${h.toFixed(2)}  |  n=${n}`;
+            }
+          }
+        }
+      },
+      scales: { y: { beginAtZero: true, max: 100 } }
+    }
   });
 };
 
 async function loadCharts() {
   try {
-    const [tsRes, aggRes, distRes] = await Promise.all([
+    const [tsRes, habitsRes] = await Promise.all([
       fetch('/api/reports/timeseries'),
-      fetch('/api/reports/aggregates'),
-      fetch('/api/reports/distribution'),
+      fetch('/api/reports/habits_quality'),
     ]);
+    if (!tsRes.ok || !habitsRes.ok) throw new Error('No se pudieron cargar los reportes');
     const ts = await tsRes.json();
-    const agg = await aggRes.json();
-    const dist = await distRes.json();
+    const habits = await habitsRes.json();
     renderTimeseries(ts);
-    renderAggregates(agg);
-    renderDistribution(dist);
+    renderHabits(habits);
   } catch (err) {
     console.error(err);
-    if (typeof showToast === 'function') showToast('No se pudieron cargar las graficas', true);
+    if (typeof showToast === 'function') showToast('No se pudieron cargar las gráficas', true);
   }
 }
 
-/* Evita múltiples inicializaciones cuando se reinyecta la vista */
-function initDashOnce() {
-  if (window._dashInit) return;
-  window._dashInit = true;
-  loadCharts();
-}
-
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initDashOnce, { once: true });
+  document.addEventListener('DOMContentLoaded', loadCharts, { once: true });
 } else {
-  initDashOnce();
+  loadCharts();
 }
 </script>
 {% endblock %}

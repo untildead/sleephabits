@@ -1,5 +1,6 @@
 import os
 import ssl
+import asyncio
 import certifi
 from typing import Optional
 from urllib.parse import parse_qsl, urlsplit, urlunsplit, urlencode
@@ -44,7 +45,7 @@ def _mask_url(url: str) -> str:
         host = parsed.hostname or ""
         port = f":{parsed.port}" if parsed.port else ""
         prefix = f"{user}:***@" if user else ("***@" if "@" in parsed.netloc else "")
-        netloc = f"{prefix}{host}{port}"
+        netloc = f"{prefix}{host}{port}"  
         return urlunsplit((parsed.scheme, netloc, parsed.path, "", ""))
     except Exception:
         return "***"
@@ -69,8 +70,6 @@ def get_engine() -> AsyncEngine:
         if not _logged_db_url:
             try:
                 print("DB_URL =", _mask_url(engine_url))
-            except Exception:
-                print("DB_URL enmascarada no disponible")
             finally:
                 _logged_db_url = True
 
@@ -82,7 +81,8 @@ def get_engine() -> AsyncEngine:
             pool_size=5,
             max_overflow=10,
             pool_pre_ping=True,
-            connect_args={"ssl": ssl_ctx},
+            # asyncpg usa 'timeout' durante el handshake TLS y autent.
+            connect_args={"ssl": ssl_ctx, "timeout": 15},
         )
 
     return _engine
@@ -100,6 +100,22 @@ def get_session_maker() -> sessionmaker:
     return _session_maker
 
 
-async def init_db():
-    async with get_engine().begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+async def init_db(retries: int = 5):
+    """
+    Inicializa la BD con reintentos exponenciales (1,2,4,8,16 s) para absorber
+    errores transitorios de red/TLS del pooler de Supabase.
+    """
+    delay = 1
+    for attempt in range(1, retries + 1):
+        try:
+            async with get_engine().begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+            print("DB init OK")
+            return
+        except Exception as exc:
+            if attempt == retries:
+                print(f"DB init FAILED (final): {exc}")
+                raise
+            print(f"DB init failed ({attempt}/{retries}): {exc} -> retry in {delay}s")
+            await asyncio.sleep(delay)
+            delay *= 2

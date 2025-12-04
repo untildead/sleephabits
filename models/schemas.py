@@ -1,7 +1,11 @@
 from datetime import date, datetime, time, timedelta
 from typing import List, Optional
 
-from pydantic import BaseModel, Field, model_validator
+import re
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+
+NAME_RE = re.compile("^[A-Za-z\u00c1\u00c9\u00cd\u00d3\u00da\u00d1\u00e1\u00e9\u00ed\u00f3\u00fa\u00f1' -]{2,50}$")
 
 
 def ensure_sleep_window(record_date: date, bedtime: time, wakeup_time: time) -> tuple[datetime, datetime]:
@@ -13,24 +17,17 @@ def ensure_sleep_window(record_date: date, bedtime: time, wakeup_time: time) -> 
     return bed_dt, wake_dt
 
 
-def compute_sleep_metrics(
-    record_date: date,
-    bedtime: time,
-    wakeup_time: time,
-    awakenings: int = 0,
-    sleep_latency_min: Optional[float] = None,
-    waso_min: Optional[float] = None,
-) -> tuple[float, float]:
+def compute_sleep_metrics(record_date: date, bedtime: time, wakeup_time: time, awakenings: int = 0) -> tuple[float, float]:
     """Calculate duration (hours) and efficiency (%) based on provided times."""
     bed_dt, wake_dt = ensure_sleep_window(record_date, bedtime, wakeup_time)
     time_in_bed_min = int((wake_dt - bed_dt).total_seconds() / 60)
     duration_hours = round(time_in_bed_min / 60, 2) if time_in_bed_min else 0.0
-    latency = sleep_latency_min or 0
-    waso = waso_min if waso_min is not None else max(0, awakenings or 0) * 5
+    awakenings = max(0, awakenings or 0)
+    waso = awakenings * 5
     if time_in_bed_min == 0:
-        efficiency = 0
+        efficiency = 0.0
     else:
-        efficiency = round(max(0, min(100, 100 * (time_in_bed_min - (latency + waso)) / time_in_bed_min)))
+        efficiency = round(max(0.0, min(100.0, 100 * (time_in_bed_min - waso) / time_in_bed_min)), 2)
     return duration_hours, efficiency
 
 
@@ -50,13 +47,36 @@ class TagRead(TagBase):
 
 
 class SubjectBase(BaseModel):
-    name: Optional[str] = None
-    age: int
-    gender: str
+    name: str = Field(..., description="2-50 letras")
+    age: int = Field(..., ge=0, le=120)
+    gender: str = Field(..., description="M/F/O")
+
+    @field_validator("name")
+    @classmethod
+    def v_name(cls, v: str) -> str:
+        cleaned = " ".join((v or "").strip().split())
+        if not NAME_RE.match(cleaned):
+            raise ValueError("El nombre solo puede contener letras y espacios (2-50 caracteres).")
+        return cleaned
+
+    @field_validator("age")
+    @classmethod
+    def v_age(cls, v: int) -> int:
+        if v is None or not (0 <= v <= 120):
+            raise ValueError("Edad inv\u00e1lida. Debe estar entre 0 y 120.")
+        return v
+
+    @field_validator("gender")
+    @classmethod
+    def v_gender(cls, v: str) -> str:
+        cleaned = (v or "").strip().upper()
+        if cleaned not in {"M", "F", "O"}:
+            raise ValueError("G\u00e9nero inv\u00e1lido. Use M, F u O.")
+        return cleaned
 
 
 class SubjectCreate(SubjectBase):
-    tag_ids: List[int] = []
+    tag_ids: List[int] = Field(default_factory=list)
 
 
 class SubjectUpdate(BaseModel):
@@ -65,6 +85,35 @@ class SubjectUpdate(BaseModel):
     gender: Optional[str] = None
     is_deleted: Optional[bool] = None
     tag_ids: Optional[List[int]] = None
+
+    @field_validator("name")
+    @classmethod
+    def v_name(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        cleaned = " ".join(v.strip().split())
+        if not NAME_RE.match(cleaned):
+            raise ValueError("El nombre solo puede contener letras y espacios (2-50 caracteres).")
+        return cleaned
+
+    @field_validator("age")
+    @classmethod
+    def v_age(cls, v: Optional[int]) -> Optional[int]:
+        if v is None:
+            return v
+        if not (0 <= v <= 120):
+            raise ValueError("Edad inv\u00e1lida. Debe estar entre 0 y 120.")
+        return v
+
+    @field_validator("gender")
+    @classmethod
+    def v_gender(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        cleaned = v.strip().upper()
+        if cleaned not in {"M", "F", "O"}:
+            raise ValueError("G\u00e9nero inv\u00e1lido. Use M, F u O.")
+        return cleaned
 
 
 class SubjectSummary(BaseModel):
@@ -79,7 +128,7 @@ class SubjectSummary(BaseModel):
 
 class SubjectRead(SubjectSummary):
     is_deleted: bool
-    tags: List[TagRead] = []
+    tags: List[TagRead] = Field(default_factory=list)
 
     class Config:
         from_attributes = True
@@ -92,9 +141,43 @@ class SleepRecordBase(BaseModel):
     wakeup_time: time
     sleep_duration: Optional[float] = None
     sleep_efficiency: Optional[float] = None
-    awakenings: int = Field(0, ge=0)
+    awakenings: int = Field(0, ge=0, le=20)
     attachment_url: Optional[str] = None
     notes: Optional[str] = None
+
+    @field_validator("record_date")
+    @classmethod
+    def v_date(cls, v: date) -> date:
+        if v > date.today():
+            raise ValueError("La fecha del registro no puede ser futura.")
+        return v
+
+    @field_validator("awakenings")
+    @classmethod
+    def v_awakenings(cls, v: int) -> int:
+        if v is None:
+            return 0
+        if not (0 <= v <= 20):
+            raise ValueError("El n\u00famero de despertares debe estar entre 0 y 20.")
+        return v
+
+    @field_validator("sleep_duration")
+    @classmethod
+    def v_duration(cls, v: Optional[float]) -> Optional[float]:
+        if v is None:
+            return v
+        if not (2.0 <= v <= 14.0):
+            raise ValueError("La duraci\u00f3n del sue\u00f1o debe estar entre 2 y 14 horas.")
+        return v
+
+    @field_validator("sleep_efficiency")
+    @classmethod
+    def v_efficiency(cls, v: Optional[float]) -> Optional[float]:
+        if v is None:
+            return v
+        if not (0.0 <= v <= 100.0):
+            raise ValueError("La eficiencia debe estar entre 0 y 100.")
+        return round(v, 2)
 
     @model_validator(mode="after")
     def compute_and_validate_metrics(self):
@@ -103,15 +186,14 @@ class SleepRecordBase(BaseModel):
             self.bedtime,
             self.wakeup_time,
             self.awakenings,
-            getattr(self, "sleep_latency_min", None),
-            getattr(self, "waso_min", None),
         )
-        if duration <= 0 or duration > 24:
-            raise ValueError("sleep_duration must be between 0 and 24 hours")
-        if efficiency < 0 or efficiency > 100:
-            raise ValueError("sleep_efficiency must be between 0 and 100")
-        self.sleep_duration = duration
-        self.sleep_efficiency = efficiency
+        if not (2.0 <= duration <= 14.0):
+            raise ValueError("La duraci\u00f3n del sue\u00f1o debe estar entre 2 y 14 horas.")
+        eff_value = self.sleep_efficiency if self.sleep_efficiency is not None else efficiency
+        if not (0.0 <= eff_value <= 100.0):
+            raise ValueError("La eficiencia debe estar entre 0 y 100.")
+        self.sleep_duration = round(duration, 2)
+        self.sleep_efficiency = round(eff_value, 2)
         return self
 
 
@@ -126,10 +208,46 @@ class SleepRecordUpdate(BaseModel):
     wakeup_time: Optional[time] = None
     sleep_duration: Optional[float] = None
     sleep_efficiency: Optional[float] = None
-    awakenings: Optional[int] = Field(default=None, ge=0)
+    awakenings: Optional[int] = Field(default=None, ge=0, le=20)
     attachment_url: Optional[str] = None
     notes: Optional[str] = None
     is_deleted: Optional[bool] = None
+
+    @field_validator("record_date")
+    @classmethod
+    def v_date(cls, v: Optional[date]) -> Optional[date]:
+        if v is None:
+            return v
+        if v > date.today():
+            raise ValueError("La fecha del registro no puede ser futura.")
+        return v
+
+    @field_validator("awakenings")
+    @classmethod
+    def v_awakenings(cls, v: Optional[int]) -> Optional[int]:
+        if v is None:
+            return v
+        if not (0 <= v <= 20):
+            raise ValueError("El n\u00famero de despertares debe estar entre 0 y 20.")
+        return v
+
+    @field_validator("sleep_duration")
+    @classmethod
+    def v_duration(cls, v: Optional[float]) -> Optional[float]:
+        if v is None:
+            return v
+        if not (2.0 <= v <= 14.0):
+            raise ValueError("La duraci\u00f3n del sue\u00f1o debe estar entre 2 y 14 horas.")
+        return round(v, 2)
+
+    @field_validator("sleep_efficiency")
+    @classmethod
+    def v_efficiency(cls, v: Optional[float]) -> Optional[float]:
+        if v is None:
+            return v
+        if not (0.0 <= v <= 100.0):
+            raise ValueError("La eficiencia debe estar entre 0 y 100.")
+        return round(v, 2)
 
     @model_validator(mode="after")
     def validate_and_compute(self):
@@ -139,15 +257,14 @@ class SleepRecordUpdate(BaseModel):
                 self.bedtime,
                 self.wakeup_time,
                 self.awakenings or 0,
-                getattr(self, "sleep_latency_min", None),
-                getattr(self, "waso_min", None),
             )
-            self.sleep_duration = duration
-            self.sleep_efficiency = efficiency
-        if self.sleep_duration is not None and (self.sleep_duration <= 0 or self.sleep_duration > 24):
-            raise ValueError("sleep_duration must be between 0 and 24 hours")
-        if self.sleep_efficiency is not None and (self.sleep_efficiency < 0 or self.sleep_efficiency > 100):
-            raise ValueError("sleep_efficiency must be between 0 and 100")
+            self.sleep_duration = round(duration, 2)
+            if self.sleep_efficiency is None:
+                self.sleep_efficiency = round(efficiency, 2)
+        if self.sleep_duration is not None and not (2.0 <= self.sleep_duration <= 14.0):
+            raise ValueError("La duraci\u00f3n del sue\u00f1o debe estar entre 2 y 14 horas.")
+        if self.sleep_efficiency is not None and not (0.0 <= self.sleep_efficiency <= 100.0):
+            raise ValueError("La eficiencia debe estar entre 0 y 100.")
         return self
 
 
