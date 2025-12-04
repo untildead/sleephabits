@@ -8,7 +8,6 @@ import random
 async def seed():
     session_maker = get_session_maker()
     async with session_maker() as session:
-        # 20 personajes animados
         names = [
             ("Mickey Mouse", 92, "M"), ("Bugs Bunny", 80, "M"), ("Homer Simpson", 45, "M"),
             ("Marge Simpson", 42, "F"), ("Bart Simpson", 10, "M"), ("Lisa Simpson", 8, "F"),
@@ -53,7 +52,6 @@ async def seed():
 
         base = date.today()
 
-        # Generación de patrones por sujeto (rotado para variedad)
         time_patterns = [
             (time(22, 0), time(6, 0)),
             (time(23, 0), time(7, 0)),
@@ -81,7 +79,6 @@ async def seed():
                 ))
                 total_inserted += 1
 
-        # Queremos al menos 150 registros. Usaremos 20 sujetos * 8 días = 160 registros (mínimo).
         days_per_subject = 8
 
         for idx, (name, _, _) in enumerate(names):
@@ -105,7 +102,6 @@ async def seed():
                     awakenings
                 )
 
-        # Si por alguna razón no alcanzamos 150 (por registros existentes), agregamos días extra a sujetos aleatorios.
         extra_offset = days_per_subject
         while total_inserted < 150:
             subj = random.choice(list(subjects.values()))
